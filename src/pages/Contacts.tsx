@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Plus, Upload, Search, Filter, Trash2, Edit2, X, Tag } from 'lucide-react';
+import { Plus, Upload, Search, Trash2, Edit2, X, Tag, Users, UserPlus } from 'lucide-react';
 import Papa from 'papaparse';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
 
 interface Contact {
   id: string;
@@ -33,7 +32,6 @@ export default function Contacts() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const { toast } = useToast();
-  const { canEdit, user } = useAuth();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -73,8 +71,7 @@ export default function Contacts() {
       last_name: formData.last_name || null,
       company: formData.company || null,
       phone: formData.phone || null,
-      tags,
-      created_by: user?.id
+      tags
     });
 
     if (error) {
@@ -140,8 +137,7 @@ export default function Contacts() {
             last_name: row.last_name || row.lastName || null,
             company: row.company || null,
             phone: row.phone || null,
-            tags: row.tags ? row.tags.split(',').map((t: string) => t.trim()) : [],
-            created_by: user?.id
+            tags: row.tags ? row.tags.split(',').map((t: string) => t.trim()) : []
           }));
 
         if (importedContacts.length === 0) {
@@ -196,109 +192,116 @@ export default function Contacts() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active': return 'bg-success/10 text-success';
-      case 'unsubscribed': return 'bg-warning/10 text-warning';
-      case 'bounced': return 'bg-destructive/10 text-destructive';
-      default: return 'bg-muted text-muted-foreground';
+      case 'active': return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
+      case 'unsubscribed': return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
+      case 'bounced': return 'bg-red-500/10 text-red-600 border-red-500/20';
+      default: return 'bg-muted text-muted-foreground border-border';
     }
   };
+
+  const activeCount = contacts.filter(c => c.status === 'active').length;
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Contacts</h1>
-            <p className="text-muted-foreground">{contacts.length} total contacts</p>
+            <h1 className="text-3xl font-bold text-foreground">Contacts</h1>
+            <p className="text-muted-foreground mt-1">{contacts.length} total • {activeCount} active</p>
           </div>
-          {canEdit && (
-            <div className="flex gap-2">
-              <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline">
-                    <Upload className="w-4 h-4 mr-2" />
-                    Import CSV
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Import Contacts</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground">
-                      Upload a CSV file with columns: email, first_name, last_name, company, phone, tags
+          <div className="flex gap-2">
+            <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="shadow-sm">
+                  <Upload className="w-4 h-4 mr-2" />
+                  Import CSV
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Import Contacts</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl bg-secondary/50 border border-dashed">
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Upload a CSV file with columns:
                     </p>
+                    <code className="text-xs bg-background px-2 py-1 rounded">
+                      email, first_name, last_name, company, phone, tags
+                    </code>
+                  </div>
+                  <Input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleImport}
+                    className="cursor-pointer"
+                  />
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-gradient-to-r from-primary to-accent hover:opacity-90 shadow-lg shadow-primary/25">
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Add Contact
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add New Contact</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleAddContact} className="space-y-4">
+                  <Input
+                    placeholder="Email *"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    required
+                  />
+                  <div className="grid grid-cols-2 gap-4">
                     <Input
-                      type="file"
-                      accept=".csv"
-                      onChange={handleImport}
+                      placeholder="First name"
+                      value={formData.first_name}
+                      onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                    />
+                    <Input
+                      placeholder="Last name"
+                      value={formData.last_name}
+                      onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
                     />
                   </div>
-                </DialogContent>
-              </Dialog>
-
-              <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-                <DialogTrigger asChild>
-                  <Button>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Contact
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add New Contact</DialogTitle>
-                  </DialogHeader>
-                  <form onSubmit={handleAddContact} className="space-y-4">
-                    <Input
-                      placeholder="Email *"
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      required
-                    />
-                    <div className="grid grid-cols-2 gap-4">
-                      <Input
-                        placeholder="First name"
-                        value={formData.first_name}
-                        onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                      />
-                      <Input
-                        placeholder="Last name"
-                        value={formData.last_name}
-                        onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                      />
-                    </div>
-                    <Input
-                      placeholder="Company"
-                      value={formData.company}
-                      onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                    />
-                    <Input
-                      placeholder="Phone"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    />
-                    <Input
-                      placeholder="Tags (comma separated)"
-                      value={formData.tags}
-                      onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                    />
-                    <Button type="submit" className="w-full">Add Contact</Button>
-                  </form>
-                </DialogContent>
-              </Dialog>
-            </div>
-          )}
+                  <Input
+                    placeholder="Company"
+                    value={formData.company}
+                    onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                  />
+                  <Input
+                    placeholder="Phone"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  />
+                  <Input
+                    placeholder="Tags (comma separated)"
+                    value={formData.tags}
+                    onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                  />
+                  <Button type="submit" className="w-full">Add Contact</Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         {/* Search and Filters */}
-        <Card>
+        <Card className="border-0 shadow-lg">
           <CardContent className="pt-6">
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search contacts..."
+                  placeholder="Search by name, email, or company..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -306,7 +309,12 @@ export default function Contacts() {
               </div>
               <div className="flex gap-2 flex-wrap">
                 {selectedTag && (
-                  <Button variant="secondary" size="sm" onClick={() => setSelectedTag(null)}>
+                  <Button 
+                    variant="secondary" 
+                    size="sm" 
+                    onClick={() => setSelectedTag(null)}
+                    className="bg-primary/10 text-primary hover:bg-primary/20"
+                  >
                     <Tag className="w-3 h-3 mr-1" />
                     {selectedTag}
                     <X className="w-3 h-3 ml-1" />
@@ -328,87 +336,94 @@ export default function Contacts() {
         </Card>
 
         {/* Contacts Table */}
-        <Card>
+        <Card className="border-0 shadow-lg overflow-hidden">
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Contact</TableHead>
-                  <TableHead className="hidden md:table-cell">Company</TableHead>
-                  <TableHead className="hidden md:table-cell">Tags</TableHead>
-                  <TableHead>Status</TableHead>
-                  {canEdit && <TableHead className="w-20">Actions</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8">
-                      Loading...
-                    </TableCell>
+            {loading ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : filteredContacts.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+                  <Users className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <p className="text-muted-foreground font-medium">No contacts found</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {searchTerm || selectedTag ? 'Try adjusting your filters' : 'Add your first contact to get started'}
+                </p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/30">
+                    <TableHead className="font-semibold">Contact</TableHead>
+                    <TableHead className="hidden md:table-cell font-semibold">Company</TableHead>
+                    <TableHead className="hidden lg:table-cell font-semibold">Tags</TableHead>
+                    <TableHead className="font-semibold">Status</TableHead>
+                    <TableHead className="w-24 font-semibold">Actions</TableHead>
                   </TableRow>
-                ) : filteredContacts.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                      No contacts found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredContacts.map((contact) => (
-                    <TableRow key={contact.id}>
+                </TableHeader>
+                <TableBody>
+                  {filteredContacts.map((contact) => (
+                    <TableRow key={contact.id} className="hover:bg-muted/20">
                       <TableCell>
-                        <div>
-                          <p className="font-medium">
-                            {contact.first_name || contact.last_name
-                              ? `${contact.first_name || ''} ${contact.last_name || ''}`.trim()
-                              : contact.email}
-                          </p>
-                          <p className="text-sm text-muted-foreground">{contact.email}</p>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-sm font-semibold text-primary">
+                            {(contact.first_name?.[0] || contact.email[0]).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-medium">
+                              {contact.first_name || contact.last_name
+                                ? `${contact.first_name || ''} ${contact.last_name || ''}`.trim()
+                                : contact.email}
+                            </p>
+                            <p className="text-sm text-muted-foreground">{contact.email}</p>
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell">
+                      <TableCell className="hidden md:table-cell text-muted-foreground">
                         {contact.company || '-'}
                       </TableCell>
-                      <TableCell className="hidden md:table-cell">
+                      <TableCell className="hidden lg:table-cell">
                         <div className="flex gap-1 flex-wrap">
                           {contact.tags.slice(0, 2).map((tag, i) => (
-                            <Badge key={i} variant="secondary">{tag}</Badge>
+                            <Badge key={i} variant="secondary" className="text-xs">{tag}</Badge>
                           ))}
                           {contact.tags.length > 2 && (
-                            <Badge variant="outline">+{contact.tags.length - 2}</Badge>
+                            <Badge variant="outline" className="text-xs">+{contact.tags.length - 2}</Badge>
                           )}
                         </div>
                       </TableCell>
                       <TableCell>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(contact.status)}`}>
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${getStatusColor(contact.status)}`}>
                           {contact.status}
                         </span>
                       </TableCell>
-                      {canEdit && (
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => startEdit(contact)}
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteContact(contact.id)}
-                            >
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      )}
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => startEdit(contact)}
+                            className="h-8 w-8"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteContact(contact.id)}
+                            className="h-8 w-8 hover:bg-destructive/10"
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
 

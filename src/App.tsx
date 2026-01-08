@@ -3,8 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider, useAuth } from "./hooks/useAuth";
-import Auth from "./pages/Auth";
+import { AuthProvider } from "./hooks/useAuth";
 import Dashboard from "./pages/Dashboard";
 import Contacts from "./pages/Contacts";
 import Templates from "./pages/Templates";
@@ -15,25 +14,18 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading, role } = useAuth();
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  if (!user || !role) return <Navigate to="/auth" replace />;
-  return <>{children}</>;
-}
-
 function AppRoutes() {
-  const { user, role } = useAuth();
   return (
     <Routes>
-      <Route path="/auth" element={user && role ? <Navigate to="/dashboard" replace /> : <Auth />} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />
-      <Route path="/templates" element={<ProtectedRoute><Templates /></ProtectedRoute>} />
-      <Route path="/campaigns" element={<ProtectedRoute><Campaigns /></ProtectedRoute>} />
-      <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+      <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/contacts" element={<Contacts />} />
+      <Route path="/templates" element={<Templates />} />
+      <Route path="/campaigns" element={<Campaigns />} />
+      <Route path="/campaigns/new" element={<Campaigns />} />
+      <Route path="/campaigns/:id" element={<Campaigns />} />
+      <Route path="/analytics" element={<Analytics />} />
+      <Route path="/settings" element={<Settings />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
