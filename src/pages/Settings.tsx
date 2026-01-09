@@ -79,11 +79,37 @@ export default function Settings() {
   };
 
   const handleTestConnection = async () => {
+    if (!settings.host || !settings.username || !settings.password || !settings.from_email) {
+      toast({ title: 'Missing fields', description: 'Please fill in all SMTP settings including password', variant: 'destructive' });
+      return;
+    }
+
     setTesting(true);
-    // Simulate test - in production this would call an edge function
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+      const response = await supabase.functions.invoke('test-smtp', {
+        body: {
+          host: settings.host,
+          port: settings.port,
+          username: settings.username,
+          password: settings.password,
+          from_email: settings.from_email,
+          from_name: settings.from_name,
+          use_tls: settings.use_tls,
+          test_email: settings.from_email // Send test to the from_email
+        }
+      });
+
+      if (response.error) {
+        toast({ title: 'Connection failed', description: response.error.message, variant: 'destructive' });
+      } else if (response.data?.error) {
+        toast({ title: 'Connection failed', description: response.data.error, variant: 'destructive' });
+      } else {
+        toast({ title: 'Connection successful!', description: 'A test email was sent to ' + settings.from_email });
+      }
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message || 'Failed to test connection', variant: 'destructive' });
+    }
     setTesting(false);
-    toast({ title: 'Connection test', description: 'SMTP connection test completed. Configure edge function for actual testing.' });
   };
 
   return (
