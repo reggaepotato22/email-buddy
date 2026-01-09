@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Plus, Upload, Search, Trash2, Edit2, X, Tag, Users, UserPlus } from 'lucide-react';
+import { Plus, Upload, Search, Trash2, Edit2, X, Tag, Users, UserPlus, ClipboardPaste, CheckCircle, AlertCircle } from 'lucide-react';
 import Papa from 'papaparse';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -23,6 +24,17 @@ interface Contact {
   created_at: string;
 }
 
+interface ParsedContact {
+  email: string;
+  first_name?: string;
+  last_name?: string;
+  company?: string;
+  phone?: string;
+  tags?: string[];
+  valid: boolean;
+  error?: string;
+}
+
 export default function Contacts() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,7 +42,11 @@ export default function Contacts() {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isBulkPasteOpen, setIsBulkPasteOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [bulkPasteText, setBulkPasteText] = useState('');
+  const [parsedContacts, setParsedContacts] = useState<ParsedContact[]>([]);
+  const [bulkImporting, setBulkImporting] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -176,6 +192,117 @@ export default function Contacts() {
     });
   };
 
+  // Bulk Paste Parser
+  const parseBulkContacts = (text: string): ParsedContact[] => {
+    const lines = text.trim().split('\n').filter(line => line.trim());
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    
+    return lines.map(line => {
+      const parts = line.split(/[,\t;|]+/).map(p => p.trim());
+      
+      // Try to find email in any position
+      const emailIndex = parts.findIndex(p => emailRegex.test(p));
+      
+      if (emailIndex === -1) {
+        // Try to extract email from anywhere in the line
+        const emailMatch = line.match(/[^\s@]+@[^\s@]+\.[^\s@]+/);
+        if (emailMatch) {
+          return {
+            email: emailMatch[0],
+            first_name: parts[0] !== emailMatch[0] ? parts[0] : undefined,
+            valid: true
+          };
+        }
+        return { email: line, valid: false, error: 'No valid email found' };
+      }
+      
+      const email = parts[emailIndex];
+      const beforeEmail = parts.slice(0, emailIndex);
+      const afterEmail = parts.slice(emailIndex + 1);
+      
+      let first_name: string | undefined;
+      let last_name: string | undefined;
+      let company: string | undefined;
+      let phone: string | undefined;
+      
+      // Parse name parts
+      if (beforeEmail.length >= 2) {
+        first_name = beforeEmail[0];
+        last_name = beforeEmail[1];
+        company = beforeEmail[2];
+      } else if (beforeEmail.length === 1) {
+        const nameParts = beforeEmail[0].split(' ');
+        first_name = nameParts[0];
+        last_name = nameParts.slice(1).join(' ') || undefined;
+      }
+      
+      // Parse after-email parts
+      if (afterEmail.length > 0) {
+        if (!company) company = afterEmail[0];
+        if (afterEmail[1]) phone = afterEmail[1];
+      }
+      
+      // Detect phone numbers
+      const phoneRegex = /^[\d\s\-\+\(\)]{7,}$/;
+      parts.forEach(p => {
+        if (phoneRegex.test(p.replace(/\D/g, '')) && p.length >= 7) {
+          phone = p;
+        }
+      });
+      
+      return {
+        email,
+        first_name,
+        last_name,
+        company,
+        phone,
+        valid: true
+      };
+    });
+  };
+
+  const handleBulkPasteChange = (text: string) => {
+    setBulkPasteText(text);
+    if (text.trim()) {
+      setParsedContacts(parseBulkContacts(text));
+    } else {
+      setParsedContacts([]);
+    }
+  };
+
+  const handleBulkImport = async () => {
+    const validContacts = parsedContacts.filter(c => c.valid);
+    if (validContacts.length === 0) {
+      toast({ title: 'No valid contacts to import', variant: 'destructive' });
+      return;
+    }
+    
+    setBulkImporting(true);
+    
+    const contactsToInsert = validContacts.map(c => ({
+      email: c.email,
+      first_name: c.first_name || null,
+      last_name: c.last_name || null,
+      company: c.company || null,
+      phone: c.phone || null,
+      tags: c.tags || []
+    }));
+    
+    const { error } = await supabase.from('contacts').insert(contactsToInsert);
+    
+    if (error) {
+      toast({ title: 'Import failed', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: `${validContacts.length} contacts imported successfully!` });
+      setIsBulkPasteOpen(false);
+      setBulkPasteText('');
+      setParsedContacts([]);
+      fetchContacts();
+    }
+    
+    setBulkImporting(false);
+  };
+
   const allTags = [...new Set(contacts.flatMap(c => c.tags))];
 
   const filteredContacts = contacts.filter(contact => {
@@ -210,7 +337,109 @@ export default function Contacts() {
             <h1 className="text-3xl font-bold text-foreground">Contacts</h1>
             <p className="text-muted-foreground mt-1">{contacts.length} total • {activeCount} active</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            {/* Bulk Paste Dialog */}
+            <Dialog open={isBulkPasteOpen} onOpenChange={setIsBulkPasteOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="shadow-sm">
+                  <ClipboardPaste className="w-4 h-4 mr-2" />
+                  Bulk Paste
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Bulk Paste Contacts</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl bg-secondary/50 border border-dashed">
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Paste multiple contacts - one per line. Supports various formats:
+                    </p>
+                    <div className="text-xs font-mono space-y-1 text-muted-foreground">
+                      <p>john@example.com</p>
+                      <p>John Doe, john@example.com</p>
+                      <p>John, Doe, john@example.com, Acme Inc</p>
+                      <p>john@example.com | John | Doe | Company | +1234567890</p>
+                    </div>
+                  </div>
+                  
+                  <Textarea
+                    placeholder="Paste your contacts here..."
+                    value={bulkPasteText}
+                    onChange={(e) => handleBulkPasteChange(e.target.value)}
+                    rows={8}
+                    className="font-mono text-sm"
+                  />
+                  
+                  {parsedContacts.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium">Preview ({parsedContacts.filter(c => c.valid).length} valid)</p>
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="flex items-center gap-1 text-emerald-600">
+                            <CheckCircle className="w-4 h-4" />
+                            {parsedContacts.filter(c => c.valid).length}
+                          </span>
+                          {parsedContacts.filter(c => !c.valid).length > 0 && (
+                            <span className="flex items-center gap-1 text-red-500">
+                              <AlertCircle className="w-4 h-4" />
+                              {parsedContacts.filter(c => !c.valid).length}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="max-h-48 overflow-y-auto border rounded-lg">
+                        {parsedContacts.slice(0, 10).map((contact, idx) => (
+                          <div 
+                            key={idx} 
+                            className={`p-2 text-sm flex items-center gap-2 ${
+                              contact.valid ? 'bg-emerald-500/5' : 'bg-red-500/5'
+                            } ${idx > 0 ? 'border-t' : ''}`}
+                          >
+                            {contact.valid ? (
+                              <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                            ) : (
+                              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <span className="font-medium">{contact.email}</span>
+                              {contact.first_name && (
+                                <span className="text-muted-foreground"> • {contact.first_name} {contact.last_name || ''}</span>
+                              )}
+                              {contact.company && (
+                                <span className="text-muted-foreground"> • {contact.company}</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                        {parsedContacts.length > 10 && (
+                          <div className="p-2 text-sm text-muted-foreground text-center border-t">
+                            ... and {parsedContacts.length - 10} more
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <Button 
+                    onClick={handleBulkImport} 
+                    disabled={bulkImporting || parsedContacts.filter(c => c.valid).length === 0}
+                    className="w-full"
+                  >
+                    {bulkImporting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                        Importing...
+                      </>
+                    ) : (
+                      <>Import {parsedContacts.filter(c => c.valid).length} Contacts</>
+                    )}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+            
             <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" className="shadow-sm">
