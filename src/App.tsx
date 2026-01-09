@@ -8,6 +8,7 @@ import Dashboard from "./pages/Dashboard";
 import Contacts from "./pages/Contacts";
 import Templates from "./pages/Templates";
 import Campaigns from "./pages/Campaigns";
+import CampaignCreate from "./pages/CampaignCreate";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
@@ -22,7 +23,7 @@ function AppRoutes() {
       <Route path="/contacts" element={<Contacts />} />
       <Route path="/templates" element={<Templates />} />
       <Route path="/campaigns" element={<Campaigns />} />
-      <Route path="/campaigns/new" element={<Campaigns />} />
+      <Route path="/campaigns/new" element={<CampaignCreate />} />
       <Route path="/campaigns/:id" element={<Campaigns />} />
       <Route path="/analytics" element={<Analytics />} />
       <Route path="/settings" element={<Settings />} />
